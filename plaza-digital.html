@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Plaza Digital — Sistema de Transporte</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080c10;--s1:#0e1318;--s2:#141b22;--s3:#1a2330;
+  --border:#1f2d3d;--accent:#00d4aa;--accent2:#ff6b35;
+  --blue:#3b82f6;--yellow:#fbbf24;--red:#ef4444;--green:#22c55e;
+  --text:#e2eaf4;--muted:#4a6080;
+  --mono:'JetBrains Mono',monospace;--sans:'Plus Jakarta Sans',sans-serif;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--sans)}
+.app{display:grid;grid-template-rows:48px 1fr;grid-template-columns:300px 1fr 300px;height:100vh}
+header{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:0 16px;background:var(--s1);border-bottom:1px solid var(--border);z-index:2000}
+.brand{font-weight:800;font-size:15px;letter-spacing:-.3px}
+.brand span{color:var(--accent)}
+.pill{font-family:var(--mono);font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid}
+.pill-green{color:var(--green);border-color:var(--green);background:rgba(34,197,94,.08)}
+.pill-yellow{color:var(--yellow);border-color:var(--yellow);background:rgba(251,191,36,.08)}
+.pill-blue{color:var(--blue);border-color:var(--blue);background:rgba(59,130,246,.08)}
+.pill-gray{color:var(--muted);border-color:var(--border);background:var(--s2)}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.gps-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(34,197,94,.2);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,.2)}50%{box-shadow:0 0 0 6px rgba(34,197,94,.05)}}
+.header-stat{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.header-stat b{color:var(--text)}
+.panel-left,.panel-right{background:var(--s1);display:flex;flex-direction:column;overflow:hidden}
+.panel-left{border-right:1px solid var(--border)}
+.panel-right{border-left:1px solid var(--border)}
+.panel-section{padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.ptitle{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.rider-card{display:flex;align-items:center;gap:10px;padding:10px;background:var(--s2);border-radius:10px;border:1px solid var(--border)}
+.rider-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--blue));display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.rider-name{font-weight:700;font-size:13px}
+.rider-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.gps-panel{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.gps-item{background:var(--s2);border-radius:8px;padding:8px;border:1px solid var(--border)}
+.gps-val{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent)}
+.gps-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.eta-bar{padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.eta-main{display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--s2);border-radius:10px;border:1px solid var(--border);margin-bottom:7px}
+.eta-val{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--accent)}
+.eta-sub{font-size:10px;color:var(--muted);margin-top:2px}
+.progress-track{height:4px;background:var(--s3);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--blue));border-radius:2px;transition:width .4s;width:0%}
+.stops-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 4px;flex-shrink:0}
+.stops-scroll{flex:1;overflow-y:auto;padding:6px 14px 12px;display:flex;flex-direction:column;gap:6px;min-height:80px}
+.stops-empty{font-size:11px;color:var(--muted);text-align:center;padding:18px 6px;border:1px dashed var(--border);border-radius:8px}
+.stop-card{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;background:var(--s2);border-radius:10px;border:1px solid var(--border);transition:border-color .2s;cursor:grab}
+.stop-card:hover{border-color:rgba(0,212,170,.4)}
+.stop-card.active{border-color:var(--accent);background:rgba(0,212,170,.05)}
+.stop-card.done{opacity:.5}
+.stop-card.dragging{opacity:.4}
+.stop-num{width:26px;height:26px;border-radius:7px;background:var(--s3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--accent)}
+.stop-card.done .stop-num{background:var(--green);color:#000}
+.stop-info{flex:1;min-width:0}
+.stop-name{font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stop-addr{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stop-eta{font-family:var(--mono);font-size:10px;color:var(--yellow);margin-top:4px}
+.stop-actions{display:flex;flex-direction:column;gap:2px;flex-shrink:0}
+.stop-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:1px 5px;border-radius:4px;line-height:1;transition:color .2s}
+.stop-btn:hover{color:var(--accent)}
+.stop-btn.rm:hover{color:var(--red)}
+.add-stop-form{padding:10px 14px;border-top:1px solid var(--border);flex-shrink:0;background:var(--s1)}
+.add-stop-row{display:flex;gap:6px;margin-bottom:6px}
+.add-input{flex:1;background:var(--s2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-family:var(--sans);font-size:11px;outline:none;transition:border-color .2s;min-width:0}
+.add-input:focus{border-color:var(--accent)}
+.add-input::placeholder{color:var(--muted)}
+.btn-add{padding:7px 12px;background:var(--accent);color:#000;border:none;border-radius:7px;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;transition:background .2s;white-space:nowrap}
+.btn-add:hover{background:#00f0c0}
+.btn-add:disabled{opacity:.5;cursor:not-allowed}
+.preset-btns{display:flex;gap:5px;flex-wrap:wrap}
+.preset-btn{font-size:10px;padding:4px 8px;background:var(--s3);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-family:var(--sans);transition:all .2s}
+.preset-btn:hover{border-color:var(--accent);color:var(--accent)}
+.hint{font-size:10px;color:var(--muted);margin-top:6px;font-style:italic}
+#map{width:100%;height:100%}
+.nav-instr-box{padding:10px 14px 0;flex-shrink:0}
+.current-step{background:var(--s2);border-radius:10px;border:1px solid var(--accent);padding:11px;margin-bottom:8px}
+.nav-scroll{flex:1;overflow-y:auto;padding:0 14px 8px;min-height:60px}
+.nav-step{display:flex;align-items:flex-start;gap:9px;padding:8px 9px;border-radius:8px;border:1px solid transparent;margin-bottom:5px;font-size:11px;transition:all .3s}
+.nav-step.current{background:rgba(0,212,170,.08);border-color:rgba(0,212,170,.3)}
+.nav-step.passed{opacity:.3}
+.nav-icon{width:24px;height:24px;border-radius:6px;flex-shrink:0;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:12px}
+.nav-step.current .nav-icon{background:rgba(0,212,170,.2)}
+.nav-dist{font-family:var(--mono);font-size:10px;color:var(--accent);margin-top:3px}
+.algo-box{margin:0 14px 8px;padding:10px;background:var(--s2);border-radius:10px;border:1px solid var(--border);flex-shrink:0}
+.algo-title{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:7px}
+.algo-row{display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)}
+.algo-row:last-child{border-bottom:none}
+.algo-key{color:var(--muted)}.algo-val{font-family:var(--mono);font-weight:600}
+.traffic-alert{margin:0 14px 8px;padding:9px;border-radius:8px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);font-size:11px;display:none;flex-shrink:0}
+.traffic-alert.show{display:block}
+.traffic-alert b{color:var(--yellow)}
+.log-scroll{flex:1;overflow-y:auto;padding:0 14px 8px;display:flex;flex-direction:column;gap:4px;min-height:60px}
+.log-entry{font-family:var(--mono);font-size:10px;line-height:1.5;padding:5px 8px;border-radius:5px;border-left:2px solid}
+.log-info{border-color:var(--blue);background:rgba(59,130,246,.05);color:#93c5fd}
+.log-warn{border-color:var(--yellow);background:rgba(251,191,36,.05);color:var(--yellow)}
+.log-success{border-color:var(--green);background:rgba(34,197,94,.05);color:var(--green)}
+.log-accent{border-color:var(--accent);background:rgba(0,212,170,.05);color:var(--accent)}
+.log-time{color:var(--muted);margin-right:6px}
+.ctrl-bar{padding:10px 14px;display:flex;gap:7px;border-top:1px solid var(--border);flex-shrink:0}
+.btn{flex:1;padding:8px;border:none;border-radius:8px;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;transition:all .2s}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-start{background:var(--accent);color:#000}
+.btn-start:hover:not(:disabled){background:#00f0c0}
+.btn-recalc{background:var(--s3);color:var(--yellow);border:1px solid rgba(251,191,36,.3)}
+.btn-recalc:hover:not(:disabled){background:rgba(251,191,36,.15)}
+.btn-reset{background:var(--s3);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.btn-reset:hover{background:rgba(239,68,68,.1)}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.leaflet-popup-content-wrapper{background:var(--s2)!important;color:var(--text)!important;border:1px solid var(--border);border-radius:10px!important;font-family:var(--sans);font-size:12px;box-shadow:0 8px 32px rgba(0,0,0,.6)!important}
+.leaflet-popup-tip{background:var(--s2)!important}
+.leaflet-popup-close-button{color:var(--muted)!important}
+.leaflet-container{background:#0a0e13}
+.rider-marker{background:var(--accent);width:18px;height:18px;border-radius:50%;border:3px solid #000;box-shadow:0 0 0 2px var(--accent),0 0 18px var(--accent)}
+.stop-marker{background:var(--s2);color:var(--accent);width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;font-family:var(--mono)}
+.stop-marker span{transform:rotate(45deg)}
+.stop-marker.done{background:var(--green);color:#000;border-color:var(--green)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">Plaza<span>Digital</span></div>
+    <span class="pill pill-gray" id="statusPill">⏸ LISTO</span>
+    <span class="pill pill-blue">OSRM ROUTING</span>
+    <span class="pill pill-yellow" id="trafficPill" style="display:none">⚠ TRÁFICO</span>
+    <div class="header-right">
+      <div class="gps-dot"></div>
+      <span class="header-stat">GPS <b>±3m</b></span>
+      <span class="header-stat">Vel <b id="hSpeed">0</b> km/h</span>
+      <span class="header-stat">Señal <b>98%</b></span>
+    </div>
+  </header>
+
+  <!-- LEFT -->
+  <aside class="panel-left">
+    <div class="panel-section">
+      <div class="ptitle">Repartidor</div>
+      <div class="rider-card">
+        <div class="rider-avatar">🛵</div>
+        <div>
+          <div class="rider-name">Carlos M.</div>
+          <div class="rider-meta">ID #4821 · Moto · Plaza Digital</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="ptitle">GPS &amp; Sensores</div>
+      <div class="gps-panel">
+        <div class="gps-item"><div class="gps-val" id="gpsLat">19.43260</div><div class="gps-lbl">Latitud</div></div>
+        <div class="gps-item"><div class="gps-val" id="gpsLng">-99.14040</div><div class="gps-lbl">Longitud</div></div>
+        <div class="gps-item"><div class="gps-val">±3m</div><div class="gps-lbl">Precisión</div></div>
+        <div class="gps-item"><div class="gps-val">12</div><div class="gps-lbl">Satélites</div></div>
+      </div>
+    </div>
+
+    <div class="eta-bar">
+      <div class="ptitle">Progreso general</div>
+      <div class="eta-main">
+        <div>
+          <div class="eta-val" id="etaVal">—</div>
+          <div class="eta-sub">Próxima entrega</div>
+        </div>
+        <div style="text-align:right">
+          <div class="eta-val" id="kmVal" style="color:var(--blue)">—</div>
+          <div class="eta-sub">km restantes</div>
+        </div>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="progFill"></div></div>
+    </div>
+
+    <div class="stops-header">
+      <div class="ptitle" style="margin:0">Paradas (<span id="stopCount">0</span>)</div>
+    </div>
+    <div class="stops-scroll" id="stopsList"></div>
+
+    <div class="add-stop-form">
+      <div class="ptitle">Agregar parada</div>
+      <div class="add-stop-row">
+        <input class="add-input" id="addName" placeholder="Nombre (ej. Cliente A)"/>
+      </div>
+      <div class="add-stop-row">
+        <input class="add-input" id="addAddr" placeholder="Dirección"/>
+        <button class="btn-add" id="btnAdd">+ Agregar</button>
+      </div>
+      <div class="preset-btns">
+        <button class="preset-btn" data-p="0">Polanco</button>
+        <button class="preset-btn" data-p="1">Roma Nte</button>
+        <button class="preset-btn" data-p="2">Condesa</button>
+        <button class="preset-btn" data-p="3">Reforma</button>
+      </div>
+      <div class="hint">💡 Click en el mapa para añadir una parada</div>
+    </div>
+  </aside>
+
+  <!-- MAP -->
+  <main style="position:relative"><div id="map"></div></main>
+
+  <!-- RIGHT -->
+  <aside class="panel-right">
+    <div class="nav-instr-box">
+      <div class="ptitle">Navegación guiada</div>
+      <div class="current-step">
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Instrucción actual</div>
+        <div id="curInstr" style="font-weight:700;font-size:13px">Agrega paradas e inicia →</div>
+        <div id="curDist" style="font-family:var(--mono);font-size:11px;color:var(--accent);margin-top:5px">—</div>
+      </div>
+    </div>
+    <div class="nav-scroll" id="navList"></div>
+
+    <div class="algo-box">
+      <div class="algo-title">⚙ Motor de rutas</div>
+      <div class="algo-row"><span class="algo-key">Algoritmo</span><span class="algo-val" style="color:var(--accent)">OSRM</span></div>
+      <div class="algo-row"><span class="algo-key">Segmentos</span><span class="algo-val" id="aSegs">—</span></div>
+      <div class="algo-row"><span class="algo-key">Distancia total</span><span class="algo-val" id="aDist">—</span></div>
+      <div class="algo-row"><span class="algo-key">Recálculos</span><span class="algo-val" id="aRecalc">0</span></div>
+      <div class="algo-row"><span class="algo-key">Tráfico</span><span class="algo-val" id="aTraf">No</span></div>
+    </div>
+
+    <div class="traffic-alert" id="trafAlert"><b>⚠ Evento de tráfico</b><div id="trafMsg" style="margin-top:3px">—</div></div>
+
+    <div class="ptitle" style="padding:0 14px">Log del sistema</div>
+    <div class="log-scroll" id="logBox"></div>
+
+    <div class="ctrl-bar">
+      <button class="btn btn-start" id="btnStart">▶ Iniciar</button>
+      <button class="btn btn-recalc" id="btnRecalc">⟳ Recalc.</button>
+      <button class="btn btn-reset" id="btnReset">■ Reset</button>
+    </div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ============ Plaza Digital — Sistema de Transporte ============ */
+const ORIGIN = { name:"Plaza Digital HQ", addr:"Centro de distribución", lat:19.43260, lng:-99.14040 };
+const PRESETS = [
+  { name:"Cliente Polanco",   addr:"Av. Presidente Masaryk 100",  lat:19.4330, lng:-99.1950 },
+  { name:"Cliente Roma Nte.", addr:"Calle Orizaba 120",           lat:19.4180, lng:-99.1610 },
+  { name:"Cliente Condesa",   addr:"Av. Tamaulipas 80",           lat:19.4120, lng:-99.1740 },
+  { name:"Cliente Reforma",   addr:"Paseo de la Reforma 250",     lat:19.4280, lng:-99.1670 },
+];
+
+const state = {
+  stops: [],            // {id,name,addr,lat,lng,done,etaMin}
+  routeCoords: [],      // [[lat,lng], ...]
+  routeSteps: [],       // OSRM steps for current leg
+  currentStepIdx: 0,
+  riderIdx: 0,          // index along routeCoords
+  totalDistKm: 0,
+  recalcs: 0,
+  running: false,
+  timer: null,
+  trafficActive: false,
+  riderPos: [ORIGIN.lat, ORIGIN.lng],
+};
+
+/* ---------- Map ---------- */
+const map = L.map('map',{ zoomControl:true, attributionControl:false }).setView([ORIGIN.lat, ORIGIN.lng], 13);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{ subdomains:'abcd', maxZoom:19 }).addTo(map);
+
+const riderIcon = L.divIcon({ className:'', html:'<div class="rider-marker"></div>', iconSize:[18,18], iconAnchor:[9,9] });
+const riderMarker = L.marker(state.riderPos,{ icon:riderIcon, zIndexOffset:1000 }).addTo(map);
+L.marker([ORIGIN.lat,ORIGIN.lng],{
+  icon: L.divIcon({ className:'', html:'<div class="stop-marker" style="background:var(--accent2);border-color:var(--accent2);color:#000"><span>HQ</span></div>', iconSize:[28,28], iconAnchor:[14,28]})
+}).addTo(map).bindPopup('<b>Plaza Digital HQ</b><br>Origen');
+
+const stopMarkers = new Map(); // id -> marker
+let routeLine = null;
+
+map.on('click', (e)=>{
+  addStop({ name:`Parada ${state.stops.length+1}`, addr:`${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`, lat:e.latlng.lat, lng:e.latlng.lng });
+});
+
+/* ---------- Logging ---------- */
+function log(msg, type='info'){
+  const box = document.getElementById('logBox');
+  const t = new Date().toLocaleTimeString('es-MX',{hour12:false});
+  const div = document.createElement('div');
+  div.className = `log-entry log-${type}`;
+  div.innerHTML = `<span class="log-time">${t}</span>${msg}`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  while(box.children.length > 60) box.removeChild(box.firstChild);
+}
+
+/* ---------- Stops CRUD ---------- */
+let nextId = 1;
+function addStop({name, addr, lat, lng}){
+  const stop = { id:nextId++, name, addr, lat, lng, done:false, etaMin:null };
+  state.stops.push(stop);
+  renderStops(); renderMarkers();
+  log(`Parada añadida: ${name}`, 'success');
+  recalcRoute();
+}
+function removeStop(id){
+  const s = state.stops.find(x=>x.id===id); if(!s) return;
+  state.stops = state.stops.filter(x=>x.id!==id);
+  renderStops(); renderMarkers();
+  log(`Parada eliminada: ${s.name}`, 'warn');
+  recalcRoute();
+}
+function moveStop(id, dir){
+  const i = state.stops.findIndex(x=>x.id===id);
+  const j = i+dir;
+  if(i<0 || j<0 || j>=state.stops.length) return;
+  [state.stops[i], state.stops[j]] = [state.stops[j], state.stops[i]];
+  renderStops(); renderMarkers();
+  recalcRoute();
+}
+
+function renderStops(){
+  const list = document.getElementById('stopsList');
+  document.getElementById('stopCount').textContent = state.stops.length;
+  list.innerHTML = '';
+  if(state.stops.length === 0){
+    list.innerHTML = '<div class="stops-empty">Sin paradas. Añade una o haz click en el mapa.</div>';
+    return;
+  }
+  const activeIdx = state.stops.findIndex(s=>!s.done);
+  state.stops.forEach((s,i)=>{
+    const card = document.createElement('div');
+    card.className = `stop-card ${s.done?'done':''} ${i===activeIdx && state.running?'active':''}`;
+    card.innerHTML = `
+      <div class="stop-num">${s.done?'✓':i+1}</div>
+      <div class="stop-info">
+        <div class="stop-name">${s.name}</div>
+        <div class="stop-addr">${s.addr}</div>
+        ${s.etaMin!=null?`<div class="stop-eta">ETA ~${s.etaMin} min</div>`:''}
+      </div>
+      <div class="stop-actions">
+        <button class="stop-btn" title="Subir" data-act="up">▲</button>
+        <button class="stop-btn" title="Bajar" data-act="dn">▼</button>
+        <button class="stop-btn rm" title="Eliminar" data-act="rm">✕</button>
+      </div>`;
+    card.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const a = b.dataset.act;
+        if(a==='rm') removeStop(s.id);
+        else if(a==='up') moveStop(s.id,-1);
+        else if(a==='dn') moveStop(s.id, 1);
+      });
+    });
+    card.addEventListener('click', ()=> map.flyTo([s.lat,s.lng], 15));
+    list.appendChild(card);
+  });
+}
+
+function renderMarkers(){
+  for(const m of stopMarkers.values()) map.removeLayer(m);
+  stopMarkers.clear();
+  state.stops.forEach((s,i)=>{
+    const m = L.marker([s.lat,s.lng],{
+      icon: L.divIcon({ className:'', html:`<div class="stop-marker ${s.done?'done':''}"><span>${s.done?'✓':i+1}</span></div>`, iconSize:[28,28], iconAnchor:[14,28] })
+    }).addTo(map).bindPopup(`<b>${s.name}</b><br>${s.addr}`);
+    stopMarkers.set(s.id, m);
+  });
+}
+
+/* ---------- Routing (OSRM) ---------- */
+async function fetchRoute(coords){
+  // coords: [[lng,lat], ...]
+  const path = coords.map(c=>`${c[0]},${c[1]}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/driving/${path}?overview=full&geometries=geojson&steps=true`;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('OSRM '+r.status);
+  return r.json();
+}
+
+let recalcSeq = 0;
+function clearRouteLine(){
+  if(routeLine){ map.removeLayer(routeLine); routeLine = null; }
+}
+async function recalcRoute(){
+  const mySeq = ++recalcSeq;
+  clearRouteLine();
+  state.routeCoords = []; state.routeSteps = []; state.currentStepIdx = 0; state.riderIdx = 0;
+  document.getElementById('aSegs').textContent = '—';
+  document.getElementById('aDist').textContent = '—';
+  document.getElementById('etaVal').textContent = '—';
+  document.getElementById('kmVal').textContent = '—';
+  document.getElementById('progFill').style.width = '0%';
+
+  const pending = state.stops.filter(s=>!s.done);
+  if(pending.length === 0){ renderNav([]); return; }
+
+  const startPos = state.running ? state.riderPos : [ORIGIN.lat, ORIGIN.lng];
+  const coords = [[startPos[1], startPos[0]], ...pending.map(s=>[s.lng, s.lat])];
+
+  log(`Calculando ruta vía OSRM (${pending.length} paradas)…`, 'accent');
+  try{
+    const data = await fetchRoute(coords);
+    // Descartar resultado si ya hay otro recalc más reciente o si ya no hay paradas pendientes
+    if(mySeq !== recalcSeq) return;
+    const stillPending = state.stops.filter(s=>!s.done);
+    if(stillPending.length === 0){ clearRouteLine(); return; }
+    if(!data.routes || !data.routes.length) throw new Error('Sin ruta');
+    const route = data.routes[0];
+    state.routeCoords = route.geometry.coordinates.map(c=>[c[1], c[0]]);
+    state.totalDistKm = route.distance/1000;
+    clearRouteLine();
+    routeLine = L.polyline(state.routeCoords, { color:'#00d4aa', weight:5, opacity:.85 }).addTo(map);
+
+    // ETAs por leg
+    let acc = 0;
+    route.legs.forEach((leg, i)=>{
+      acc += leg.duration;
+      if(stillPending[i]) stillPending[i].etaMin = Math.round(acc/60);
+    });
+
+    // Steps del primer leg
+    state.routeSteps = route.legs[0]?.steps || [];
+
+    document.getElementById('aSegs').textContent = state.routeCoords.length;
+    document.getElementById('aDist').textContent = state.totalDistKm.toFixed(2)+' km';
+    document.getElementById('kmVal').textContent = state.totalDistKm.toFixed(1);
+    document.getElementById('etaVal').textContent = stillPending[0].etaMin+' min';
+    state.recalcs++;
+    document.getElementById('aRecalc').textContent = state.recalcs;
+
+    if(!state.running){
+      const grp = L.featureGroup([routeLine, ...stopMarkers.values()]);
+      map.fitBounds(grp.getBounds().pad(0.15));
+    }
+    renderNav(state.routeSteps);
+    renderStops();
+    log(`Ruta lista: ${state.totalDistKm.toFixed(2)} km`, 'success');
+  }catch(err){
+    if(mySeq !== recalcSeq) return;
+    const stillPending = state.stops.filter(s=>!s.done);
+    if(stillPending.length === 0){ clearRouteLine(); return; }
+    log(`Error OSRM: ${err.message}. Fallback recto.`, 'warn');
+    const pts = [startPos, ...stillPending.map(s=>[s.lat,s.lng])];
+    state.routeCoords = interpolateLine(pts, 80);
+    state.totalDistKm = haversineTotal(pts);
+    clearRouteLine();
+    routeLine = L.polyline(state.routeCoords,{color:'#fbbf24',weight:4,opacity:.7,dashArray:'8,8'}).addTo(map);
+    document.getElementById('aDist').textContent = state.totalDistKm.toFixed(2)+' km (aprox)';
+    document.getElementById('kmVal').textContent = state.totalDistKm.toFixed(1);
+    stillPending.forEach((s,i)=> s.etaMin = Math.round((haversineTotal([startPos,...stillPending.slice(0,i+1).map(p=>[p.lat,p.lng])])/40)*60));
+    document.getElementById('etaVal').textContent = stillPending[0].etaMin+' min';
+    renderNav([]); renderStops();
+  }
+}
+
+function renderNav(steps){
+  const list = document.getElementById('navList');
+  list.innerHTML = '';
+  if(!steps.length){
+    document.getElementById('curInstr').textContent = state.stops.length? 'Inicia la simulación →' : 'Agrega paradas →';
+    document.getElementById('curDist').textContent = '—';
+    return;
+  }
+  steps.forEach((st,i)=>{
+    const div = document.createElement('div');
+    div.className = `nav-step ${i===state.currentStepIdx?'current':i<state.currentStepIdx?'passed':''}`;
+    const inst = st.maneuver?.instruction || translateManeuver(st);
+    div.innerHTML = `<div class="nav-icon">${maneuverIcon(st)}</div>
+      <div style="flex:1;min-width:0"><div>${inst}</div><div class="nav-dist">${(st.distance/1000).toFixed(2)} km</div></div>`;
+    list.appendChild(div);
+  });
+  const cur = steps[state.currentStepIdx];
+  if(cur){
+    document.getElementById('curInstr').textContent = cur.maneuver?.instruction || translateManeuver(cur);
+    document.getElementById('curDist').textContent = `en ${(cur.distance/1000).toFixed(2)} km`;
+  }
+}
+function translateManeuver(s){
+  const t = s.maneuver?.type || 'continúa';
+  const m = s.maneuver?.modifier || '';
+  const dict = {'turn':'Gira','new name':'Continúa','depart':'Inicia','arrive':'Llegada','merge':'Incorpórate','on ramp':'Toma rampa','off ramp':'Salida','fork':'En la bifurcación','roundabout':'Rotonda','continue':'Continúa'};
+  return `${dict[t]||t} ${m||''} ${s.name?'por '+s.name:''}`.trim();
+}
+function maneuverIcon(s){
+  const m = s.maneuver?.modifier||''; const t = s.maneuver?.type||'';
+  if(t==='arrive') return '🏁'; if(t==='depart') return '🚦';
+  if(m.includes('right')) return '➡'; if(m.includes('left')) return '⬅';
+  if(t==='roundabout') return '⟳'; return '⬆';
+}
+
+/* ---------- Helpers ---------- */
+function haversine(a,b){
+  const R=6371, toR=x=>x*Math.PI/180;
+  const dLat=toR(b[0]-a[0]), dLng=toR(b[1]-a[1]);
+  const h=Math.sin(dLat/2)**2+Math.cos(toR(a[0]))*Math.cos(toR(b[0]))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function haversineTotal(pts){ let d=0; for(let i=1;i<pts.length;i++) d+=haversine(pts[i-1],pts[i]); return d; }
+function interpolateLine(pts, n){
+  const out=[]; for(let i=1;i<pts.length;i++){
+    for(let k=0;k<n;k++){ const t=k/n; out.push([pts[i-1][0]+(pts[i][0]-pts[i-1][0])*t, pts[i-1][1]+(pts[i][1]-pts[i-1][1])*t]); }
+  } out.push(pts[pts.length-1]); return out;
+}
+
+/* ---------- Simulation ---------- */
+function start(){
+  if(state.stops.filter(s=>!s.done).length===0){ log('No hay paradas pendientes','warn'); return; }
+  if(!state.routeCoords.length){ log('Sin ruta — recalculando','warn'); recalcRoute().then(()=>setTimeout(start,400)); return; }
+  state.running = true;
+  document.getElementById('statusPill').textContent = '▶ EN RUTA';
+  document.getElementById('statusPill').className = 'pill pill-green';
+  document.getElementById('btnStart').textContent = '⏸ Pausa';
+  log('Simulación iniciada','success');
+  state.timer = setInterval(tick, 100);
+  scheduleTraffic();
+}
+function pause(){
+  state.running=false; clearInterval(state.timer); state.timer=null;
+  document.getElementById('statusPill').textContent='⏸ PAUSA';
+  document.getElementById('statusPill').className='pill pill-yellow';
+  document.getElementById('btnStart').textContent='▶ Reanudar';
+  log('Simulación pausada','warn');
+}
+function reset(){
+  pause();
+  state.stops.forEach(s=>{ s.done=false; s.etaMin=null; });
+  state.riderPos=[ORIGIN.lat,ORIGIN.lng];
+  riderMarker.setLatLng(state.riderPos);
+  state.recalcs=0; state.trafficActive=false;
+  document.getElementById('aRecalc').textContent='0';
+  document.getElementById('aTraf').textContent='No';
+  document.getElementById('trafficPill').style.display='none';
+  document.getElementById('trafAlert').classList.remove('show');
+  document.getElementById('statusPill').textContent='⏸ LISTO';
+  document.getElementById('statusPill').className='pill pill-gray';
+  document.getElementById('btnStart').textContent='▶ Iniciar';
+  document.getElementById('hSpeed').textContent='0';
+  log('Sistema reiniciado','info');
+  recalcRoute();
+}
+
+let stepCounter = 0;
+function tick(){
+  if(!state.routeCoords.length || state.riderIdx >= state.routeCoords.length-1){
+    completeNextStop(); return;
+  }
+  // Avanza ~3 puntos por tick (≈ velocidad)
+  state.riderIdx = Math.min(state.routeCoords.length-1, state.riderIdx+1);
+  state.riderPos = state.routeCoords[state.riderIdx];
+  riderMarker.setLatLng(state.riderPos);
+  document.getElementById('gpsLat').textContent = state.riderPos[0].toFixed(5);
+  document.getElementById('gpsLng').textContent = state.riderPos[1].toFixed(5);
+  document.getElementById('hSpeed').textContent = state.trafficActive? 18 : 42;
+
+  // Progreso
+  const pct = (state.riderIdx/(state.routeCoords.length-1))*100;
+  document.getElementById('progFill').style.width = pct.toFixed(1)+'%';
+  const remainKm = state.totalDistKm * (1-pct/100);
+  document.getElementById('kmVal').textContent = remainKm.toFixed(2);
+
+  // Avance de paso
+  if(stepCounter++ % 30 === 0 && state.routeSteps.length){
+    state.currentStepIdx = Math.min(state.routeSteps.length-1, state.currentStepIdx+1);
+    renderNav(state.routeSteps);
+  }
+
+  // Llegada al primer pendiente
+  const next = state.stops.find(s=>!s.done);
+  if(next && haversine(state.riderPos,[next.lat,next.lng]) < 0.05){
+    completeNextStop();
+  }
+}
+function completeNextStop(){
+  const next = state.stops.find(s=>!s.done);
+  if(!next){
+    log('🎉 Todas las entregas completadas','success');
+    pause();
+    clearRouteLine();
+    state.routeCoords = []; state.routeSteps = []; state.currentStepIdx = 0; state.riderIdx = 0;
+    document.getElementById('aSegs').textContent = '—';
+    document.getElementById('aDist').textContent = '—';
+    document.getElementById('etaVal').textContent = '—';
+    document.getElementById('kmVal').textContent = '—';
+    document.getElementById('progFill').style.width = '0%';
+    renderNav([]);
+    document.getElementById('statusPill').textContent='✓ COMPLETADO';
+    document.getElementById('statusPill').className='pill pill-green';
+    return;
+  }
+  next.done = true;
+  log(`Entrega completada: ${next.name}`,'success');
+  state.currentStepIdx=0;
+  recalcRoute();
+}
+
+function scheduleTraffic(){
+  if(!state.running) return;
+  setTimeout(()=>{
+    if(!state.running) return;
+    if(Math.random()<0.5){
+      state.trafficActive=true;
+      document.getElementById('aTraf').textContent='Sí';
+      document.getElementById('trafficPill').style.display='';
+      document.getElementById('trafAlert').classList.add('show');
+      document.getElementById('trafMsg').textContent='Congestión detectada — ajustando velocidad';
+      log('⚠ Tráfico detectado','warn');
+      setTimeout(()=>{
+        state.trafficActive=false;
+        document.getElementById('aTraf').textContent='No';
+        document.getElementById('trafficPill').style.display='none';
+        document.getElementById('trafAlert').classList.remove('show');
+        log('Tráfico despejado','info');
+      }, 6000);
+    }
+    scheduleTraffic();
+  }, 12000);
+}
+
+/* ---------- UI bindings ---------- */
+document.getElementById('btnAdd').addEventListener('click', ()=>{
+  const name = document.getElementById('addName').value.trim();
+  const addr = document.getElementById('addAddr').value.trim();
+  if(!name || !addr){ log('Completa nombre y dirección','warn'); return; }
+  // Coloca cerca del centro con jitter
+  const c = map.getCenter();
+  addStop({ name, addr, lat:c.lat+(Math.random()-.5)*0.04, lng:c.lng+(Math.random()-.5)*0.04 });
+  document.getElementById('addName').value=''; document.getElementById('addAddr').value='';
+});
+document.querySelectorAll('.preset-btn').forEach(b=>{
+  b.addEventListener('click', ()=>{ addStop({...PRESETS[+b.dataset.p]}); });
+});
+document.getElementById('btnStart').addEventListener('click', ()=> state.running? pause(): start());
+document.getElementById('btnRecalc').addEventListener('click', ()=>{ log('Recálculo manual','accent'); recalcRoute(); });
+document.getElementById('btnReset').addEventListener('click', reset);
+
+/* ---------- Init ---------- */
+log('Plaza Digital — sistema listo','accent');
+renderStops(); renderNav([]);
+</script>
+</body>
+</html>
